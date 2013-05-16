@@ -60,4 +60,5 @@ P1025RDB	config_ddr3_1gb_p1_p2_rdb_pc_667M.dat
 P1016RDB	config_ddr3_1gb_p1_p2_rdb_pc_667M.dat
 P1020UTM	config_ddr3_1gb_p1_p2_rdb_pc_800M.dat
 P1020MBG	config_ddr3_1gb_p1_p2_rdb_pc_800M.dat
+P1020RDB-PD	config_ddr3_1gb_p1_p2_rdb_pd_800M.dat
 MPC8536DS	config_ddr2_512m_mpc8536ds_667M.dat
