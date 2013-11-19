@@ -687,6 +687,7 @@ int main(int argc, char *argv[])
 	uint rel_sectors = 0;
 	uint offmin = 0xffffffff, offmax = 0;
 	off64_t sd_sectors = 0;
+	bool high_capacity = false, block_addr = false;
 	bool pblboot;
 	struct hd_geometry geometry;
 	struct option longopts[] = {
@@ -781,7 +782,7 @@ int main(int argc, char *argv[])
 
 	if (work_mode == BOOT_WORK_MODE_SD) {
 		/* Open SD device */
-		h_sd_dev = open(p_devname, O_RDWR, 0666);
+		h_sd_dev = open64(p_devname, O_RDWR, 0666);
 		if (h_sd_dev < 0) {
 			exitcode = errno;
 			printf(MSG_OPEN_FILE_FAIL, p_devname);
@@ -811,6 +812,13 @@ int main(int argc, char *argv[])
 		}
 		sd_sectors = BYTE_TO_SEC(BYTE_ROUNDUP_TO_SEC(sd_sectors));
 		debug("SDCard has %u sectors\n", (uint)sd_sectors);
+
+		/*
+		 * Total capacity more than 2GB should be block addressed.
+		 * Set a flags For high capacity card.
+		 */
+		if (SEC_TO_BYTE(sd_sectors) > HIGHCAPACITY_CARD)
+			high_capacity = true;
 
 		if(!read_sector(h_sd_dev, 0, mbr_buf)) {
 			exitcode = errno;
@@ -921,7 +929,17 @@ int main(int argc, char *argv[])
 	if (exitcode)
 		goto end;
 
-	
+	/* Deal with board spescific request */
+	for (i = 0; i < config_num; i++) {
+		if (pconfig_word[i]->off == BOOT_BOARD_SPEC_FLAGS) {
+			/* check if block address is required for Highcapacity card */
+			if ((work_mode == BOOT_WORK_MODE_SD) &&
+					(pconfig_word[i]->val & BLOCK_ADDRESS_FORMAT) &&
+					(high_capacity == true))
+				block_addr = true;
+		}
+	}
+
 	/* User code + Reserved space */
 	len = BYTE_ROUNDUP_TO_SEC(len);
 	len += BYTE_ROUNDUP_TO_SEC(rev_space);
@@ -931,7 +949,10 @@ int main(int argc, char *argv[])
 	for (i = 0; i < config_num; i++) {
 		if (pconfig_word[i]->off == BOOT_IMAGE_LEN_OFF) {
 			/* The length must be aligned to the sector size */
-			pconfig_word[i]->val = len;
+			if (block_addr)
+				pconfig_word[i]->val = BYTE_TO_SEC(len);
+			else
+				pconfig_word[i]->val = len;
 			//break; Changed to deal with complex copy/paste configs
 		}
 	}
@@ -961,12 +982,21 @@ int main(int argc, char *argv[])
 		goto end;
 	}
 
+	if ((SEC_TO_BYTE((off64_t)n) > (uint)-1) && !block_addr) {
+		printf(MSG_PARTLENGTH_LARGE_FAIL);
+		exitcode = EINVAL;
+		goto end;
+	}
+
 	/* Change config word[0x50] to final user code position
 	 * JZ: Source address should be always byte mode*/
 	for (i = 0; i < config_num; i++) {
 		if (pconfig_word[i]->off == BOOT_IMAGE_ADDR_OFF) {
 			code_addr = i;
-			pconfig_word[i]->val = SEC_TO_BYTE_OFFSET(n);
+			if (block_addr)
+				pconfig_word[i]->val = n;
+			else
+				pconfig_word[i]->val = SEC_TO_BYTE_OFFSET(n);
 			break;
 		}
 	}
@@ -1003,9 +1033,8 @@ int main(int argc, char *argv[])
 		/* Write user code to sd card */
 		debug("\nWriting image to %s...",
 			(work_mode == BOOT_WORK_MODE_SD) ? "SDCard" : "SPI image");
-		if(lseek(h_dev, pconfig_word[code_addr]->val, SEEK_SET) < 0) {
+		if (lseek64(h_dev, SEC_TO_BYTE_OFFSET((off64_t)n), SEEK_SET) < 0)
 			goto writefail;
-		}
 
 		len = SEC_TO_BYTE(sec_user) - BYTE_ROUNDUP_TO_SEC(rev_space);
 		ptr = (uchar *)usercode_buf;

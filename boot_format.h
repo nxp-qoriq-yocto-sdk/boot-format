@@ -37,7 +37,8 @@
  *
  * The structure for non-PBL devices, e.g., P2020 contains:
  *  Offset     Data Bits [0:31]
- * 0x00-0x3F   Reserved
+ * 0x00-0x3b   Reserved
+ * 0x3c        Board specific flags.
  * 0x40-0x43   BOOT signature. This location should contain the value 0x424f_4f54,
  * 0x44-0x47   Reserved
  * 0x48-0x4B   User's code length. Number of bytes in the user's code to be copied.
@@ -84,6 +85,13 @@
 	#define debug(fmt, arg...)
 #endif
 
+#define BOOT_BOARD_SPEC_FLAGS	0x3c
+/*
+ * Flags for address format, '0' for byte address format,
+ * '1' in bit 0 for block address format
+ */
+#define BLOCK_ADDRESS_FORMAT	(1<<0)
+
 #define BOOT_SIGNATURE_OFF	0x40
 #define BOOT_SIGNATURE		0x424f4f54
 #define BOOT_IMAGE_LEN_OFF	0x48
@@ -100,6 +108,12 @@
 #define MBRDBR_BOOT_SIG_AA	0x1ff
 
 #define SECTOR_SIZE	512
+/*
+ * Normal SD card has it capacity up to 2 * 1000 * 1000 * 1000 bytes
+ * High capacity card has its capacity up to 32 * 1000 * 1000 * 1000 bytes
+ */
+#define HIGHCAPACITY_CARD	(2 * 1000 * 1000 * 1000)
+
 #define SEC_TO_BYTE(x)		((x) * SECTOR_SIZE)
 #define SEC_TO_BYTE_OFFSET(x)	((x) * SECTOR_SIZE)
 #define BYTE_ROUNDUP_TO_SEC(x)	(((x) + SECTOR_SIZE - 1) & ~(SECTOR_SIZE - 1))
@@ -131,6 +145,9 @@
 
 #define MSG_PARTLENGTH_FAIL "Partition is too small to save the user code. "\
 			    "Please re-partition it again\n"
+
+#define MSG_PARTLENGTH_LARGE_FAIL	"First Partition size should be less than 4GiB. "\
+					"Please re-partition it again\n"
 
 #define DELIMITER	':'
 
